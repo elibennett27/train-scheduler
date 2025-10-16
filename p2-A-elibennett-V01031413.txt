@@ -1,0 +1,222 @@
+P2: Multi-Thread Scheduling (MTS) Design Document
+
+Question 1: How many threads are you going to use? Specify the work that you intend each thread to perform. 
+
+(N + 1) threads, where N is the number of trains in the input file.
+
+The N train threads will:
+
+	1. Simulate loading process, using usleep() with the trains loading time.
+
+ 	2. Signal train is ready to cross - add it to queue.
+
+	3. Wait on a convar until it receives permission to cross main track. 
+
+	4. Simulate crossing the main track with usleep() for the trains crossing time. 
+
+	5. Signal train has finished crossing, update shared variables.
+
+	6. Terminate train thread
+
+
+The 1 Main Thread will:
+
+	1. Do input handling (read and parse file).
+
+	2. Initialize all mutexes and convars. 
+
+	3. Create all N train threads 
+
+	4. Wait for all train threads to finish.
+
+	5. Clean up threads and mutexes.
+
+	6. Exit
+
+
+
+2. Do the threads work independently? Or is there an overall "controller" thread?
+
+There is no controller thread. Each train thread will be responsible for it's behavior. Coordination will happen through shared data structures, mutexes, and convars. Scheduling will be facilitated through the signals the train threads throw and through the priority hierarchy in the input file. The main thread will only initialize, create threads, and cleanup once the train threads are finished.
+
+
+3. How many mutexes are you going to use? Specify the operation that each mutex will guard. 
+
+I will use one global mutex that will guard all shared variables. 
+
+The global mutex will guard these operations:
+	
+	- The two station queues (trains waiting to cross from East and from West)
+
+	- The track_occupied flag (sets when main track is in use)
+
+	- Last_direction variable (direction of last train crossed)
+
+	- Consecutive_count variable (number of consecutive trains in the same direction)
+
+	- Any other shared variables needed for scheduling.
+
+
+4. Will the main thread be idle? If not, what will it be doing?
+
+The main thread is not idle. The main thread will create all train threads and then will call pthread_join() on each train thread in sequence, ensuring it (the main thread) will wait for all trains to finish before proceeding. Once the trains complete, the main thread will cleanup (destroy mutexes and convars). It will then exit the program. 
+
+
+5. How are you going to represent stations (which are collections of loaded trains ready to depart)? That is, what type of data structure will you use?
+
+
+The train stations will be represented in the program as two linked lists. 
+
+One will be the east station, containing an array of pointers to train structs departing from the East station (so travelling West). 
+
+The other will be the west station, containing an array of pointers to train structs departing from the West station (so travelling East). 
+
+Train Struct:
+
+-trainID
+
+-direction (E or W)
+
+-priority (high or low)
+
+-loading time
+
+-crossing time
+
+-ready time (time elapsed from start of program to end of each train's loading time)
+
+
+
+
+6. How are you going to ensure that data structures in your program will not be modified concurrently? 
+
+
+Any shared data structure would be protected by the global mutex. 
+
+How it would work:
+
+1. Before gaining access to any shared data structure, the function would call pthread_mutex_lock(&global_mutex).
+
+2. Once through it will perform the operation on the shared data structure.
+
+3. Upon completion, it will call pthread_mutex_unlock(&global_mutex).
+
+
+This ensures that data structures will not be modified concurrently as only one thread at a time will be able to access said data structures.
+
+
+
+7. How many convars are you going to use? 
+
+I'm going to use one conditional variable, "train_ready_convar".
+
+a) Describe the condition that the convar will represent:
+
+This conditional variable will represent the condition "it may be my turn to cross the main track know." This signals that the state of the train system has changed such that a train in waiting should re-evaluate whether it is their time to cross. 
+
+
+b) Which mutex is associated with the convar? Why? 
+
+The train_ready_convar is associated with the global mutex because it is used to wait for changes to the shared state, and the entirety of this shared state is under protection from the global mutex. 
+
+
+c) What operation should be performed once pthread_cond_wait() has been unblocked and re-acquired the mutex? 
+
+
+Once pthread_cond_wait() has been unblocked and re-acquires the mutex, the train thread should:
+
+Check if it's eligible to cross; do I satisfy all the scheduling rules.
+
+If it is eligible, mark the track as occupied, update track variables, break out of the waiting loop.
+
+If it's not eligible, it will continue waiting.
+
+
+8. Briefly sketch the overall algorithm you will use.
+
+
+
+__________________________________________________________________
+
+Input Handling:
+
+Read input file, create array of train structs
+
+Init global mutex and train_ready_convar
+
+Create a train thread for each train in input file, and then for each train thread, call pthread_join() to wait for completion.
+
+
+Train Thread Algorithm:
+
+Load - use usleep(loading time) to simulate loading
+
+Lock global mutex
+
+Add itself to east station or west station, print "Train () is ready to go (east or west)" with timestamp
+
+Broadcast on the train_ready_convar
+
+While not it's turn to cross the track, wait on train_ready_convar which will check if it is eligible to cross based on the following scheduling rules:
+
+1. Track must be free.
+
+2. It must be the highest priority among trains waiting.
+
+3. If it has the same priority, apply direction/timing rules.
+
+4. Check starvation prevention rule.
+
+
+
+Once train becomes eligible the algorithm must:
+
+1. Mark track as occupied.
+
+2. Update last_direction to it's direction.
+
+3. Update consecutive count to track starvation.
+
+4. Remove itself from the station.
+
+5. Print "Train() is ON the main track going (east or west)" with timestamp.
+
+6. Unlock global mutex.
+
+
+End of Train Thread
+
+
+Logic for scheduling decisions:
+
+
+If track is occupied;
+	continue waiting;
+
+
+Filter to highest priority trains in the list of waiting trains at either station. Consider only the high-priority train, if none consider all low-priority trains.
+
+IF multiple trains have same priority;
+
+	If all headed in same direction:
+		Find train that finished loading first (earliest ready time)
+
+	If headed in opposite directions:
+		If no trains have crossed:
+			West train becomes eligible
+		Else:
+			Train in opposite direction of last direction becomes eligible
+
+
+IF self == eligible train:
+	Proceed to cross
+
+Else 
+	Continue waiting
+
+
+
+End of Overall Algorithm
+
+
+End of Deliverable A
