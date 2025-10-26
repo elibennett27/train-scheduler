@@ -1,6 +1,6 @@
 P2: Multi-Thread Scheduling (MTS) Design Document
 
-Question 1: How many threads are you going to use? Specify the work that you intend each thread to perform. 
+Question 1: How many threads are you going to use? Specify the work that you intend each thread to perform.
 
 (N + 1) threads, where N is the number of trains in the input file.
 
@@ -10,9 +10,9 @@ The N train threads will:
 
  	2. Signal train is ready to cross - add it to queue.
 
-	3. Wait on a convar until it receives permission to cross main track. 
+	3. Wait on a convar until it receives permission to cross main track.
 
-	4. Simulate crossing the main track with usleep() for the trains crossing time. 
+	4. Simulate crossing the main track with usleep() for the trains crossing time.
 
 	5. Signal train has finished crossing, update shared variables.
 
@@ -23,9 +23,9 @@ The 1 Main Thread will:
 
 	1. Do input handling (read and parse file).
 
-	2. Initialize all mutexes and convars. 
+	2. Initialize all mutexes and convars.
 
-	3. Create all N train threads 
+	3. Create all N train threads
 
 	4. Wait for all train threads to finish.
 
@@ -40,12 +40,12 @@ The 1 Main Thread will:
 There is no controller thread. Each train thread will be responsible for it's behavior. Coordination will happen through shared data structures, mutexes, and convars. Scheduling will be facilitated through the signals the train threads throw and through the priority hierarchy in the input file. The main thread will only initialize, create threads, and cleanup once the train threads are finished.
 
 
-3. How many mutexes are you going to use? Specify the operation that each mutex will guard. 
+3. How many mutexes are you going to use? Specify the operation that each mutex will guard.
 
-I will use one global mutex that will guard all shared variables. 
+I will use one global mutex that will guard all shared variables.
 
 The global mutex will guard these operations:
-	
+
 	- The two station queues (trains waiting to cross from East and from West)
 
 	- The track_occupied flag (sets when main track is in use)
@@ -59,17 +59,17 @@ The global mutex will guard these operations:
 
 4. Will the main thread be idle? If not, what will it be doing?
 
-The main thread is not idle. The main thread will create all train threads and then will call pthread_join() on each train thread in sequence, ensuring it (the main thread) will wait for all trains to finish before proceeding. Once the trains complete, the main thread will cleanup (destroy mutexes and convars). It will then exit the program. 
+The main thread is not idle. The main thread will create all train threads and then will call pthread_join() on each train thread in sequence, ensuring it (the main thread) will wait for all trains to finish before proceeding. Once the trains complete, the main thread will cleanup (destroy mutexes and convars). It will then exit the program.
 
 
 5. How are you going to represent stations (which are collections of loaded trains ready to depart)? That is, what type of data structure will you use?
 
 
-The train stations will be represented in the program as two linked lists. 
+The train stations will be represented in the program as two linked lists.
 
-One will be the east station, containing an array of pointers to train structs departing from the East station (so travelling West). 
+One will be the east station, containing an array of pointers to train structs departing from the East station (so travelling West).
 
-The other will be the west station, containing an array of pointers to train structs departing from the West station (so travelling East). 
+The other will be the west station, containing an array of pointers to train structs departing from the West station (so travelling East).
 
 Train Struct:
 
@@ -88,10 +88,10 @@ Train Struct:
 
 
 
-6. How are you going to ensure that data structures in your program will not be modified concurrently? 
+6. How are you going to ensure that data structures in your program will not be modified concurrently?
 
 
-Any shared data structure would be protected by the global mutex. 
+Any shared data structure would be protected by the global mutex.
 
 How it would work:
 
@@ -106,21 +106,21 @@ This ensures that data structures will not be modified concurrently as only one 
 
 
 
-7. How many convars are you going to use? 
+7. How many convars are you going to use?
 
 I'm going to use one conditional variable, "train_ready_convar".
 
 a) Describe the condition that the convar will represent:
 
-This conditional variable will represent the condition "it may be my turn to cross the main track know." This signals that the state of the train system has changed such that a train in waiting should re-evaluate whether it is their time to cross. 
+This conditional variable will represent the condition "it may be my turn to cross the main track know." This signals that the state of the train system has changed such that a train in waiting should re-evaluate whether it is their time to cross.
 
 
-b) Which mutex is associated with the convar? Why? 
+b) Which mutex is associated with the convar? Why?
 
-The train_ready_convar is associated with the global mutex because it is used to wait for changes to the shared state, and the entirety of this shared state is under protection from the global mutex. 
+The train_ready_convar is associated with the global mutex because it is used to wait for changes to the shared state, and the entirety of this shared state is under protection from the global mutex.
 
 
-c) What operation should be performed once pthread_cond_wait() has been unblocked and re-acquired the mutex? 
+c) What operation should be performed once pthread_cond_wait() has been unblocked and re-acquired the mutex?
 
 
 Once pthread_cond_wait() has been unblocked and re-acquires the mutex, the train thread should:
@@ -211,7 +211,7 @@ IF multiple trains have same priority;
 IF self == eligible train:
 	Proceed to cross
 
-Else 
+Else
 	Continue waiting
 
 
@@ -220,3 +220,5 @@ End of Overall Algorithm
 
 
 End of Deliverable A
+
+Feedback: Please make sure it can handle different train priorities, different loading times and directions, and avoid deadlocks. +2.5
